@@ -8,15 +8,13 @@
 import UIKit
 
 final class NetworkService {
+    
     static let shared = NetworkService()
-    private let key = "db73c335e9c874fa45904cf543671e0b"
-    private let geoURL = "https://api.openweathermap.org/geo/1.0/direct"
-    private let weatherURL = "https://api.openweathermap.org/data/2.5/weather"
     
     private init() {}
     
     func getCoordinates(for city: String, completion: @escaping (Result<[GeoResponse], Error>) -> Void) {
-        guard var urlComponents = URLComponents(string: geoURL) else {
+        guard var urlComponents = URLComponents(string: APIConfig.geoURL.rawValue) else {
             print("Error in URLComponents geoURL")
             completion(.failure(NetworkError.urlSessionError))
             return
@@ -25,7 +23,7 @@ final class NetworkService {
         urlComponents.queryItems = [
             URLQueryItem(name: "q", value: city),
             URLQueryItem(name: "limit", value: "1"),
-            URLQueryItem(name: "appid", value: key)
+            URLQueryItem(name: "appid", value: APIConfig.key.rawValue)
         ]
         
         guard let url = urlComponents.url else {
@@ -42,7 +40,7 @@ final class NetworkService {
     }
     
     func getWeather( lat: Double, lon: Double, completion: @escaping (Result<WeatherResponse, Error>) -> Void) {
-        guard var urlComponents = URLComponents(string: weatherURL) else {
+        guard var urlComponents = URLComponents(string: APIConfig.wearherURL.rawValue) else {
             print("Error in URLComponents weatherURL")
             completion(.failure(NetworkError.urlSessionError))
             return
@@ -51,7 +49,7 @@ final class NetworkService {
         urlComponents.queryItems = [
             URLQueryItem(name: "lat", value: "\(lat)"),
             URLQueryItem(name: "lon", value: "\(lon)"),
-            URLQueryItem(name: "appid", value: key),
+            URLQueryItem(name: "appid", value: APIConfig.key.rawValue),
             URLQueryItem(name: "units", value: "metric"),
             URLQueryItem(name: "lang", value: "ru")
         ]
@@ -67,5 +65,25 @@ final class NetworkService {
         
         let task = URLSession.shared.objectTask(for: request, completion: completion)
         task.resume()
+    }
+    
+    func getWeatherForCity(_ city: String, completion: @escaping (Result<WeatherResponse, Error>) -> Void) {
+        getCoordinates(for: city) { [ weak self ] result in
+            guard let self else { return }
+            switch result {
+            case .success(let geoData):
+                guard let cityData = geoData.first else {
+                    completion(.failure(NetworkError.noData))
+                    return
+                }
+                
+                self.getWeather(lat: cityData.lat, lon: cityData.lon) { weatherResult in
+                    completion(weatherResult)
+                }
+            case .failure(let error):
+                print("Error: \(error)")
+                completion(.failure(error))
+            }
+        }
     }
 }
