@@ -7,7 +7,7 @@
 
 import UIKit
 
-final class NetworkService {
+final class NetworkService: NetworkServiceProtocol {
     
     static let shared = NetworkService()
     

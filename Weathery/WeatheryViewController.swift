@@ -7,11 +7,11 @@
 
 import UIKit
 
-protocol WeatherServiceProtocol {
+protocol NetworkServiceProtocol {
     func getWeatherForCity(_ city: String, completion: @escaping (Result<WeatherResponse, Error>) -> Void)
 }
 
-final class WeatheryViewController: UIViewController {
+final class WeatheryViewController: UIViewController{
     
     private let cityLabel: UILabel = {
         let cityLabel = UILabel()
@@ -52,10 +52,10 @@ final class WeatheryViewController: UIViewController {
     private let activityIdicator = UIActivityIndicatorView(style: .large)
     private let searchController = UISearchController(searchResultsController: nil)
     
-    private let weatherService: WeatherServiceProtocol
+    private let networkService: NetworkServiceProtocol
     
-    init(weatherService: WeatherServiceProtocol) {
-        self.weatherService = weatherService
+    init(weatherService: NetworkServiceProtocol) {
+        self.networkService = weatherService
         super.init(nibName: nil, bundle: nil)
     }
     
@@ -150,7 +150,7 @@ final class WeatheryViewController: UIViewController {
     
     private func getWeather(_ city: String) {
         activityIdicator.startAnimating()
-        weatherService.getWeatherForCity(city) { [ weak self ] result in
+        networkService.getWeatherForCity(city) { [ weak self ] result in
             guard let self else { return }
             DispatchQueue.main.async {
                 switch result {
