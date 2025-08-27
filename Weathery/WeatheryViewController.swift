@@ -14,15 +14,17 @@ final class WeatheryViewController: UIViewController {
     private let weatherDescriptionLabel = UILabel()
     private let weatherIcon = UIImageView()
     private let activityIdicator = UIActivityIndicatorView(style: .large)
+    private let searchController = UISearchController(searchResultsController: nil)
 
     override func viewDidLoad() {
         super.viewDidLoad()
         
         view.backgroundColor = .systemCyan
         
-        getWeather()
         setupUI()
         setupConsraints()
+        setupSearchBar()
+        getWeather("Москва")
     }
     
     private func setupUI() {
@@ -51,6 +53,7 @@ final class WeatheryViewController: UIViewController {
         weatherIcon.tintColor = .systemYellow
         
         activityIdicator.color = .white
+        
     }
     
     private func setupConsraints() {
@@ -74,9 +77,22 @@ final class WeatheryViewController: UIViewController {
         ])
     }
     
-    private func getWeather() {
+    private func setupSearchBar() {
+        searchController.searchBar.placeholder = "Поиск города"
+        searchController.searchBar.searchBarStyle = .minimal
+        
+        searchController.obscuresBackgroundDuringPresentation = false
+        searchController.hidesNavigationBarDuringPresentation = false
+        
+        searchController.searchBar.delegate = self
+        
+        navigationItem.searchController = searchController
+        navigationItem.hidesSearchBarWhenScrolling = false
+    }
+    
+    private func getWeather(_ city: String) {
         activityIdicator.startAnimating()
-        NetworkService.shared.getWeatherForCity("Новокузнецк") { [ weak self ] result in
+        NetworkService.shared.getWeatherForCity(city) { [ weak self ] result in
             guard let self else { return }
             DispatchQueue.main.async {
                 switch result {
@@ -87,7 +103,11 @@ final class WeatheryViewController: UIViewController {
                     self.config(city: cityName, temperature: temperature, weather: weatherDescription)
                     self.activityIdicator.stopAnimating()
                 case .failure(let error):
+                    self.showAllertError()
                     print("Error: \(error)")
+                    self.config(city: "Ошибка", temperature: "°-°", weather: "обыденно")
+                    self.weatherIcon.tintColor = .white
+                    self.activityIdicator.stopAnimating()
                 }
             }
         }
@@ -98,5 +118,25 @@ final class WeatheryViewController: UIViewController {
         temperatureLabel.text = temperature
         weatherDescriptionLabel.text = weather
     }
+    
+    private func showAllertError() {
+        let alert = UIAlertController(title: "Ошибка",
+                                      message: "Попробуйте позже",
+                                      preferredStyle: .alert)
+        
+        let action = UIAlertAction(title: "OK", style: .default)
+        alert.addAction(action)
+        
+        present(alert, animated: true)
+    }
 }
 
+extension WeatheryViewController: UISearchBarDelegate {
+    func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
+        guard let city = searchBar.text, !city.isEmpty else { return }
+        getWeather(city)
+        searchBar.text = ""
+        searchController.dismiss(animated: true)
+        searchBar.resignFirstResponder()
+    }
+}
