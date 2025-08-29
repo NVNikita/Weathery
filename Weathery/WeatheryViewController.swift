@@ -9,9 +9,10 @@ import UIKit
 
 protocol NetworkServiceProtocol {
     func getWeatherForCity(_ city: String, completion: @escaping (Result<WeatherResponse, Error>) -> Void)
+    func getForecastForCity(_ city: String, completion: @escaping (Result<ForecastResponse, Error>) -> Void)
 }
 
-final class WeatheryViewController: UIViewController{
+final class WeatheryViewController: UIViewController {
     
     private let cityLabel: UILabel = {
         let cityLabel = UILabel()
@@ -51,6 +52,7 @@ final class WeatheryViewController: UIViewController{
     private let weatherIcon = UIImageView()
     private let activityIdicator = UIActivityIndicatorView(style: .large)
     private let searchController = UISearchController(searchResultsController: nil)
+    private var forecastData: [ForecastResponse.ForecastItem] = []
     
     private let networkService: NetworkServiceProtocol
     
@@ -66,7 +68,7 @@ final class WeatheryViewController: UIViewController{
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        view.backgroundColor = .systemCyan
+        view.backgroundColor = .systemPink
         
         setupUI()
         setupConsraints()
@@ -148,6 +150,18 @@ final class WeatheryViewController: UIViewController{
         navigationItem.hidesSearchBarWhenScrolling = false
     }
     
+    private func loadForecast(for city: String) {
+        networkService.getForecastForCity(city) { [weak self] result in
+            switch result {
+            case .success(let forecast):
+                self?.forecastData = self?.filterDailyForecast(forecast.list) ?? []
+                self?.daysCollectionView.reloadData()
+            case .failure(let error):
+                print("Ошибка прогноза: \(error)")
+            }
+        }
+    }
+    
     private func getWeather(_ city: String) {
         activityIdicator.startAnimating()
         networkService.getWeatherForCity(city) { [ weak self ] result in
@@ -163,12 +177,13 @@ final class WeatheryViewController: UIViewController{
                 case .failure(let error):
                     self.showAllertError()
                     print("Error: \(error)")
-                    self.config(city: "Ошибка", temperature: "°-°", weather: "обыденно")
+                    self.config(city: "Ошибка", temperature: "--°", weather: "--")
                     self.weatherIcon.tintColor = .white
                     self.activityIdicator.stopAnimating()
                 }
             }
         }
+        loadForecast(for: city)
     }
     
     private func config(city: String?, temperature: String?, weather: String?) {
@@ -187,6 +202,74 @@ final class WeatheryViewController: UIViewController{
         
         present(alert, animated: true)
     }
+    
+    private func getDayOfWeek(from timestamp: TimeInterval) -> String {
+        let date = Date(timeIntervalSince1970: timestamp)
+        let formatter = DateFormatter()
+        formatter.dateFormat = "EE"
+        formatter.locale = Locale(identifier: "ru_RU")
+        return formatter.string(from: date)
+    }
+    
+    private func getWeatherIcon(from iconCode: String) -> (image: UIImage?, color: UIColor) {
+        switch iconCode {
+        case "01d": return (UIImage(systemName: "sun.max"), .systemOrange)
+        case "01n": return (UIImage(systemName: "moon"), .systemGray)
+        case "02d", "03d", "04d": return (UIImage(systemName: "cloud.sun"), .systemYellow)
+        case "02n", "03n", "04n": return (UIImage(systemName: "cloud.moon"), .systemGray)
+        case "09d", "10d": return (UIImage(systemName: "cloud.rain"), .systemBlue)
+        case "09n", "10n": return (UIImage(systemName: "cloud.rain"), .systemBlue)
+        case "11d", "11n": return (UIImage(systemName: "cloud.bolt"), .systemGray3)
+        case "13d", "13n": return (UIImage(systemName: "snow"), .systemTeal)
+        case "50d", "50n": return (UIImage(systemName: "cloud.fog"), .systemGray)
+        default: return (UIImage(systemName: "questionmark"), .systemPink)
+        }
+    }
+    
+    private func filterDailyForecast(_ list: [ForecastResponse.ForecastItem]) -> [ForecastResponse.ForecastItem] {
+        var dailyForecast: [ForecastResponse.ForecastItem] = []
+        var addedDays: Set<String> = []
+        
+        let dateFormatter = DateFormatter()
+        dateFormatter.dateFormat = "yyyy-MM-dd"
+        
+        for item in list {
+            let date = Date(timeIntervalSince1970: item.dt)
+            let dayKey = dateFormatter.string(from: date)
+            
+            let calendar = Calendar.current
+            let hour = calendar.component(.hour, from: date)
+            
+            if !addedDays.contains(dayKey) && hour >= 11 && hour <= 13 {
+                dailyForecast.append(item)
+                addedDays.insert(dayKey)
+            }
+            
+            if dailyForecast.count >= 5 {
+                break
+            }
+        }
+        
+        if dailyForecast.count < 5 {
+            dailyForecast = []
+            addedDays = []
+            
+            for item in list {
+                let date = Date(timeIntervalSince1970: item.dt)
+                let dayKey = dateFormatter.string(from: date)
+                
+                if !addedDays.contains(dayKey) {
+                    dailyForecast.append(item)
+                    addedDays.insert(dayKey)
+                }
+                
+                if dailyForecast.count >= 5 {
+                    break
+                }
+            }
+        }
+        return dailyForecast
+    }
 }
 
 extension WeatheryViewController: UISearchBarDelegate {
@@ -201,7 +284,7 @@ extension WeatheryViewController: UISearchBarDelegate {
 
 extension WeatheryViewController: UICollectionViewDelegate, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        5
+        return forecastData.count
     }
     
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, minimumLineSpacingForSectionAt section: Int) -> CGFloat {
@@ -222,12 +305,25 @@ extension WeatheryViewController: UICollectionViewDelegate, UICollectionViewData
             return UICollectionViewCell()
         }
         
+        guard indexPath.item < forecastData.count else {
+            cell.dayLabel.text = "--"
+            cell.temperatureLabel.text = "--°"
+            cell.iconImageView.image = UIImage(systemName: "questionmark")
+            return cell
+        }
+        
+        let forecastItem = forecastData[indexPath.item]
+        
+        cell.dayLabel.text = getDayOfWeek(from: forecastItem.dt)
+        cell.temperatureLabel.text = "\(Int(forecastItem.main.temp))°"
+        let weatherIcon = getWeatherIcon(from: forecastItem.weather.first?.icon ?? "")
+        cell.iconImageView.image = weatherIcon.image
+        cell.iconImageView.tintColor = weatherIcon.color
+        
         cell.backgroundColor = .white
         cell.layer.masksToBounds = true
         cell.layer.cornerRadius = 25
-        cell.dayLabel.text = "Mon" // MOCK
-        cell.temperatureLabel.text = "20°" //MOCK
-        cell.iconImageView.image = UIImage(systemName: "sun.max") //MOCK
+        
         return cell
     }
     

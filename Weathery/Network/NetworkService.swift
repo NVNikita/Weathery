@@ -86,4 +86,50 @@ final class NetworkService: NetworkServiceProtocol {
             }
         }
     }
+    
+    func getForecast(lat: Double, lon: Double, completion: @escaping (Result<ForecastResponse, Error>) -> Void) {
+        guard var urlComponents = URLComponents(string: "https://api.openweathermap.org/data/2.5/forecast") else {
+            completion(.failure(NetworkError.urlSessionError))
+            return
+        }
+        
+        urlComponents.queryItems = [
+            URLQueryItem(name: "lat", value: "\(lat)"),
+            URLQueryItem(name: "lon", value: "\(lon)"),
+            URLQueryItem(name: "appid", value: APIConfig.key.rawValue),
+            URLQueryItem(name: "units", value: "metric"),
+            URLQueryItem(name: "lang", value: "ru"),
+            URLQueryItem(name: "cnt", value: "40") // 40 прогнозов (5 дней × 8 в день)
+        ]
+        
+        guard let url = urlComponents.url else {
+            completion(.failure(NetworkError.urlSessionError))
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "GET"
+        
+        let task = URLSession.shared.objectTask(for: request, completion: completion)
+        task.resume()
+    }
+    
+    func getForecastForCity(_ city: String, completion: @escaping (Result<ForecastResponse, Error>) -> Void) {
+        getCoordinates(for: city) { [weak self] result in
+            guard let self = self else { return }
+            
+            switch result {
+            case .success(let geoData):
+                guard let cityData = geoData.first else {
+                    completion(.failure(NetworkError.noData))
+                    return
+                }
+                
+                self.getForecast(lat: cityData.lat, lon: cityData.lon, completion: completion)
+                
+            case .failure(let error):
+                completion(.failure(error))
+            }
+        }
+    }
 }
