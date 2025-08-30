@@ -16,7 +16,7 @@ final class WeatheryViewController: UIViewController {
     
     private let cityLabel: UILabel = {
         let cityLabel = UILabel()
-        cityLabel.font = .systemFont(ofSize: 34, weight: .light)
+        cityLabel.font = .systemFont(ofSize: 38, weight: .light)
         cityLabel.textColor = .white
         return cityLabel
     }()
@@ -68,7 +68,7 @@ final class WeatheryViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
         
-        view.backgroundColor = .systemPink
+        view.backgroundColor = .systemCyan
         
         setupUI()
         setupConsraints()
@@ -121,8 +121,8 @@ final class WeatheryViewController: UIViewController {
             
             weatherIcon.topAnchor.constraint(equalTo: weatherDescriptionLabel.bottomAnchor, constant: 50),
             weatherIcon.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            weatherIcon.widthAnchor.constraint(equalToConstant: 150),
-            weatherIcon.heightAnchor.constraint(equalToConstant: 150),
+            weatherIcon.widthAnchor.constraint(equalToConstant: 130),
+            weatherIcon.heightAnchor.constraint(equalToConstant: 130),
             
             activityIdicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             activityIdicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
@@ -143,6 +143,9 @@ final class WeatheryViewController: UIViewController {
         
         searchController.obscuresBackgroundDuringPresentation = false
         searchController.hidesNavigationBarDuringPresentation = false
+        
+        UIBarButtonItem.appearance(whenContainedInInstancesOf: [UISearchBar.self]).title = "Готово"
+        UIBarButtonItem.appearance(whenContainedInInstancesOf: [UISearchBar.self]).tintColor = .white
         
         searchController.searchBar.delegate = self
         
@@ -169,15 +172,16 @@ final class WeatheryViewController: UIViewController {
             DispatchQueue.main.async {
                 switch result {
                 case .success(let weather):
-                    let cityName = weather.name
-                    let temperature = "\(Int(weather.main.temp))°"
-                    let weatherDescription = weather.weather.first?.description ?? ""
-                    self.config(city: cityName, temperature: temperature, weather: weatherDescription)
+                    self.config(weather: weather)
                     self.activityIdicator.stopAnimating()
                 case .failure(let error):
                     self.showAllertError()
                     print("Error: \(error)")
-                    self.config(city: "Ошибка", temperature: "--°", weather: "--")
+                    self.cityLabel.text = "--"
+                    self.temperatureLabel.text = "--"
+                    self.weatherDescriptionLabel.text = "--"
+                    self.weatherIcon.image = UIImage(systemName: "questionmark")
+                    self.weatherIcon.tintColor = .systemPink
                     self.weatherIcon.tintColor = .white
                     self.activityIdicator.stopAnimating()
                 }
@@ -186,10 +190,16 @@ final class WeatheryViewController: UIViewController {
         loadForecast(for: city)
     }
     
-    private func config(city: String?, temperature: String?, weather: String?) {
-        cityLabel.text = city
-        temperatureLabel.text = temperature
-        weatherDescriptionLabel.text = weather
+    private func config(weather: WeatherResponse) {
+        cityLabel.text = weather.name
+        temperatureLabel.text = "\(Int(weather.main.temp))°"
+        weatherDescriptionLabel.text = weather.weather.first?.description ?? ""
+        
+        if let iconCode = weather.weather.first?.icon {
+            let iconData = getWeatherIcon(from: iconCode)
+            weatherIcon.image = iconData.image
+            weatherIcon.tintColor = iconData.color
+        }
     }
     
     private func showAllertError() {
@@ -224,6 +234,12 @@ final class WeatheryViewController: UIViewController {
         case "50d", "50n": return (UIImage(systemName: "cloud.fog"), .systemGray)
         default: return (UIImage(systemName: "questionmark"), .systemPink)
         }
+    }
+    
+    private func updateWeatherIcon(from iconCode: String) {
+        let iconData = getWeatherIcon(from: iconCode)
+        weatherIcon.image = iconData.image
+        weatherIcon.tintColor = iconData.color
     }
     
     private func filterDailyForecast(_ list: [ForecastResponse.ForecastItem]) -> [ForecastResponse.ForecastItem] {
