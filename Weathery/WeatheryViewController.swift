@@ -175,15 +175,9 @@ final class WeatheryViewController: UIViewController {
                     self.config(weather: weather)
                     self.activityIdicator.stopAnimating()
                 case .failure(let error):
-                    self.showAllertError()
                     print("Error: \(error)")
-                    self.cityLabel.text = "--"
-                    self.temperatureLabel.text = "--"
-                    self.weatherDescriptionLabel.text = "--"
-                    self.weatherIcon.image = UIImage(systemName: "questionmark")
-                    self.weatherIcon.tintColor = .systemPink
-                    self.weatherIcon.tintColor = .white
-                    self.activityIdicator.stopAnimating()
+                    self.showAllertError()
+                    self.placeholderLoaderError()
                 }
             }
         }
@@ -211,6 +205,16 @@ final class WeatheryViewController: UIViewController {
         alert.addAction(action)
         
         present(alert, animated: true)
+    }
+    
+    private func placeholderLoaderError() {
+        self.cityLabel.text = "--"
+        self.temperatureLabel.text = "--"
+        self.weatherDescriptionLabel.text = "--"
+        self.weatherIcon.image = UIImage(systemName: "questionmark")
+        self.weatherIcon.tintColor = .systemPink
+        self.weatherIcon.tintColor = .white
+        self.activityIdicator.stopAnimating()
     }
     
     private func getDayOfWeek(from timestamp: TimeInterval) -> String {
