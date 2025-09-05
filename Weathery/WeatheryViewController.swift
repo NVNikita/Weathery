@@ -55,6 +55,7 @@ final class WeatheryViewController: UIViewController {
     private var forecastData: [ForecastResponse.ForecastItem] = []
     
     private let networkService: NetworkServiceProtocol
+    private let weatheeryUserDefaults = WeatheryUserDefaults.shared
     
     init(weatherService: NetworkServiceProtocol) {
         self.networkService = weatherService
@@ -73,7 +74,7 @@ final class WeatheryViewController: UIViewController {
         setupUI()
         setupConsraints()
         setupSearchBar()
-        getWeather("Москва")
+        loadCity()
     }
     
     private func setupUI() {
@@ -92,9 +93,6 @@ final class WeatheryViewController: UIViewController {
         activityIdicator.translatesAutoresizingMaskIntoConstraints = false
         daysCollectionView.translatesAutoresizingMaskIntoConstraints = false
         titleCollectionViewLabel.translatesAutoresizingMaskIntoConstraints = false
-        
-        weatherIcon.image = UIImage(systemName: "sun.max.fill") // MOCK
-        weatherIcon.tintColor = .systemYellow
         
         activityIdicator.color = .white
         
@@ -184,10 +182,20 @@ final class WeatheryViewController: UIViewController {
         loadForecast(for: city)
     }
     
+    private func loadCity() {
+        if let city = weatheeryUserDefaults.city {
+            getWeather(city)
+        } else {
+            getWeather("Москва")
+        }
+    }
+    
     private func config(weather: WeatherResponse) {
         cityLabel.text = weather.name
         temperatureLabel.text = "\(Int(weather.main.temp))°"
         weatherDescriptionLabel.text = weather.weather.first?.description ?? ""
+        
+        weatheeryUserDefaults.city = weather.name
         
         if let iconCode = weather.weather.first?.icon {
             let iconData = getWeatherIcon(from: iconCode)
