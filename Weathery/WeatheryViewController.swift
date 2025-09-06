@@ -52,9 +52,6 @@ final class WeatheryViewController: UIViewController {
     
     private let buttonLocation: UIButton = {
         let buttonLocation = UIButton()
-        buttonLocation.addTarget(WeatheryViewController.self,
-                                 action: #selector(buttonLocationTapped),
-                                 for: .touchUpInside)
         buttonLocation.setImage(UIImage(systemName: "location"), for: .normal)
         buttonLocation.tintColor = .white
         buttonLocation.backgroundColor = UIColor.white.withAlphaComponent(0.3)
@@ -70,6 +67,7 @@ final class WeatheryViewController: UIViewController {
     
     private let networkService: NetworkServiceProtocol
     private let weatheeryUserDefaults = WeatheryUserDefaults.shared
+    private let locationManager = CLLocationManager()
     
     init(weatherService: NetworkServiceProtocol) {
         self.networkService = weatherService
@@ -88,6 +86,7 @@ final class WeatheryViewController: UIViewController {
         setupUI()
         setupConsraints()
         setupSearchBar()
+        setupLocationManager()
         loadCity()
     }
     
@@ -117,9 +116,16 @@ final class WeatheryViewController: UIViewController {
         daysCollectionView.delegate = self
         daysCollectionView.dataSource = self
         
+        buttonLocation.addTarget(self, action: #selector(buttonLocationTapped), for: .touchUpInside)
+        
         daysCollectionView.layer.masksToBounds = true
         daysCollectionView.layer.cornerRadius = 25
         daysCollectionView.backgroundColor = UIColor.white.withAlphaComponent(0.3)
+    }
+    
+    private func setupLocationManager() {
+        locationManager.delegate = self
+        locationManager.desiredAccuracy = kCLLocationAccuracyKilometer
     }
     
     private func setupConsraints() {
@@ -177,7 +183,9 @@ final class WeatheryViewController: UIViewController {
             switch result {
             case .success(let forecast):
                 self?.forecastData = self?.filterDailyForecast(forecast.list) ?? []
-                self?.daysCollectionView.reloadData()
+                DispatchQueue.main.async {
+                    self?.daysCollectionView.reloadData()
+                }
             case .failure(let error):
                 print("Ошибка прогноза: \(error)")
             }
@@ -186,13 +194,14 @@ final class WeatheryViewController: UIViewController {
     
     private func getWeather(_ city: String) {
         activityIdicator.startAnimating()
-        networkService.getWeatherForCity(city) { [ weak self ] result in
-            guard let self else { return }
+        networkService.getWeatherForCity(city) { [weak self] result in
+            guard let self = self else { return }
             DispatchQueue.main.async {
                 switch result {
                 case .success(let weather):
                     self.config(weather: weather)
                     self.activityIdicator.stopAnimating()
+                    self.loadForecast(for: city) // Загружаем прогноз после успешного получения погоды
                 case .failure(let error):
                     print("Error: \(error)")
                     self.showAllertError()
@@ -200,7 +209,6 @@ final class WeatheryViewController: UIViewController {
                 }
             }
         }
-        loadForecast(for: city)
     }
     
     private func loadCity() {
@@ -242,7 +250,6 @@ final class WeatheryViewController: UIViewController {
         self.weatherDescriptionLabel.text = "--"
         self.weatherIcon.image = UIImage(systemName: "questionmark")
         self.weatherIcon.tintColor = .systemPink
-        self.weatherIcon.tintColor = .white
         self.activityIdicator.stopAnimating()
     }
     
@@ -267,12 +274,6 @@ final class WeatheryViewController: UIViewController {
         case "50d", "50n": return (UIImage(systemName: "cloud.fog"), .systemGray)
         default: return (UIImage(systemName: "questionmark"), .systemPink)
         }
-    }
-    
-    private func updateWeatherIcon(from iconCode: String) {
-        let iconData = getWeatherIcon(from: iconCode)
-        weatherIcon.image = iconData.image
-        weatherIcon.tintColor = iconData.color
     }
     
     private func filterDailyForecast(_ list: [ForecastResponse.ForecastItem]) -> [ForecastResponse.ForecastItem] {
@@ -320,8 +321,81 @@ final class WeatheryViewController: UIViewController {
         return dailyForecast
     }
     
-    @objc func buttonLocationTapped() {
+    @objc private func buttonLocationTapped() {
+        let status = locationManager.authorizationStatus
         
+        switch status {
+        case .notDetermined:
+            locationManager.requestWhenInUseAuthorization()
+        case .authorizedWhenInUse, .authorizedAlways:
+            startLocationUpdate()
+        case .denied, .restricted:
+            showLocationDeniedAlert()
+        @unknown default:
+            break
+        }
+    }
+    
+    private func startLocationUpdate() {
+        activityIdicator.startAnimating()
+        locationManager.startUpdatingLocation()
+    }
+    
+    private func showLocationDeniedAlert() {
+        let alert = UIAlertController(
+            title: "Доступ к геолокации запрещен",
+            message: "Разрешите доступ к геолокации в Настройках > Конфиденциальность > Службы геолокации",
+            preferredStyle: .alert
+        )
+        
+        alert.addAction(UIAlertAction(title: "Отмена", style: .cancel))
+        alert.addAction(UIAlertAction(title: "Настройки", style: .default) { _ in
+            if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
+                UIApplication.shared.open(settingsURL)
+            }
+        })
+        
+        present(alert, animated: true)
+    }
+    
+    private func reverseGeocode(location: CLLocation) {
+        let geocoder = CLGeocoder()
+        
+        geocoder.reverseGeocodeLocation(location) { [weak self] (placemarks, error) in
+            guard let self = self else { return }
+            
+            DispatchQueue.main.async {
+                self.activityIdicator.stopAnimating()
+                
+                if let error = error {
+                    print("Ошибка геокодирования: \(error.localizedDescription)")
+                    self.showGeocodingErrorAlert()
+                    return
+                }
+                
+                if let placemark = placemarks?.first {
+                    let city = placemark.locality ?? placemark.administrativeArea ?? placemark.name ?? "Неизвестный город"
+                    
+                    if city != "Неизвестный город" {
+                        self.getWeather(city)
+                    } else {
+                        self.showGeocodingErrorAlert()
+                    }
+                } else {
+                    self.showGeocodingErrorAlert()
+                }
+            }
+        }
+    }
+    
+    private func showGeocodingErrorAlert() {
+        let alert = UIAlertController(
+            title: "Ошибка",
+            message: "Не удалось определить ваш город",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
     }
 }
 
@@ -379,6 +453,45 @@ extension WeatheryViewController: UICollectionViewDelegate, UICollectionViewData
         
         return cell
     }
-    
 }
 
+extension WeatheryViewController: CLLocationManagerDelegate {
+    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
+        manager.stopUpdatingLocation()
+        
+        guard let location = locations.last else {
+            activityIdicator.stopAnimating()
+            return
+        }
+        
+        reverseGeocode(location: location)
+    }
+    
+    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
+        manager.stopUpdatingLocation()
+        activityIdicator.stopAnimating()
+        print("Ошибка получения локации: \(error.localizedDescription)")
+        
+        let alert = UIAlertController(
+            title: "Ошибка",
+            message: "Не удалось получить ваше местоположение",
+            preferredStyle: .alert
+        )
+        alert.addAction(UIAlertAction(title: "OK", style: .default))
+        present(alert, animated: true)
+    }
+    
+    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
+        switch manager.authorizationStatus {
+        case .authorizedWhenInUse, .authorizedAlways:
+            startLocationUpdate()
+        case .denied, .restricted:
+            activityIdicator.stopAnimating()
+            showLocationDeniedAlert()
+        case .notDetermined:
+            break
+        @unknown default:
+            break
+        }
+    }
+}
