@@ -121,6 +121,12 @@ final class WeatheryViewController: UIViewController {
         daysCollectionView.layer.masksToBounds = true
         daysCollectionView.layer.cornerRadius = 25
         daysCollectionView.backgroundColor = UIColor.white.withAlphaComponent(0.3)
+        
+        cityLabel.alpha = 0
+        temperatureLabel.alpha = 0
+        weatherDescriptionLabel.alpha = 0
+        weatherIcon.alpha = 0
+        titleCollectionViewLabel.alpha = 0
     }
     
     private func setupLocationManager() {
@@ -201,7 +207,7 @@ final class WeatheryViewController: UIViewController {
                 case .success(let weather):
                     self.config(weather: weather)
                     self.activityIdicator.stopAnimating()
-                    self.loadForecast(for: city) // Загружаем прогноз после успешного получения погоды
+                    self.loadForecast(for: city)
                 case .failure(let error):
                     print("Error: \(error)")
                     self.showAllertError()
@@ -219,6 +225,30 @@ final class WeatheryViewController: UIViewController {
         }
     }
     
+    private func animateElements() {
+        self.cityLabel.transform = CGAffineTransform(translationX: 0, y: 20)
+        self.temperatureLabel.transform = CGAffineTransform(translationX: 0, y: 20)
+        self.weatherIcon.transform = CGAffineTransform(scaleX: 0.8, y: 0.8)
+        
+        UIView.animate(withDuration: 0.6) {
+            self.cityLabel.alpha = 1
+            self.cityLabel.transform = .identity
+        }
+        
+        UIView.animate(withDuration: 0.6, delay: 0.1, options: .curveEaseOut) {
+            self.temperatureLabel.alpha = 1
+            self.temperatureLabel.transform = .identity
+        }
+        
+        UIView.animate(withDuration: 0.8, delay: 0.2, usingSpringWithDamping: 0.6, initialSpringVelocity: 0.5) {
+            self.weatherIcon.alpha = 1
+            self.weatherIcon.transform = .identity
+            self.weatherDescriptionLabel.alpha = 1
+            self.titleCollectionViewLabel.alpha = 1
+            self.daysCollectionView.alpha = 1
+        }
+    }
+    
     private func config(weather: WeatherResponse) {
         cityLabel.text = weather.name
         temperatureLabel.text = "\(Int(weather.main.temp))°"
@@ -231,6 +261,7 @@ final class WeatheryViewController: UIViewController {
             weatherIcon.image = iconData.image
             weatherIcon.tintColor = iconData.color
         }
+        animateElements()
     }
     
     private func showAllertError() {
@@ -251,6 +282,13 @@ final class WeatheryViewController: UIViewController {
         self.weatherIcon.image = UIImage(systemName: "questionmark")
         self.weatherIcon.tintColor = .systemPink
         self.activityIdicator.stopAnimating()
+        
+        UIView.animate(withDuration: 0.4) {
+                self.cityLabel.alpha = 1
+                self.temperatureLabel.alpha = 1
+                self.weatherDescriptionLabel.alpha = 1
+                self.weatherIcon.alpha = 1
+            }
     }
     
     private func getDayOfWeek(from timestamp: TimeInterval) -> String {
