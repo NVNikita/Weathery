@@ -6,6 +6,7 @@
 //
 
 import UIKit
+import CoreLocation
 
 protocol NetworkServiceProtocol {
     func getWeatherForCity(_ city: String, completion: @escaping (Result<WeatherResponse, Error>) -> Void)
@@ -49,6 +50,19 @@ final class WeatheryViewController: UIViewController {
         return UICollectionView(frame: .zero, collectionViewLayout: layout)
     }()
     
+    private let buttonLocation: UIButton = {
+        let buttonLocation = UIButton()
+        buttonLocation.addTarget(WeatheryViewController.self,
+                                 action: #selector(buttonLocationTapped),
+                                 for: .touchUpInside)
+        buttonLocation.setImage(UIImage(systemName: "location"), for: .normal)
+        buttonLocation.tintColor = .white
+        buttonLocation.backgroundColor = UIColor.white.withAlphaComponent(0.3)
+        buttonLocation.layer.masksToBounds = true
+        buttonLocation.layer.cornerRadius = 21
+        return buttonLocation
+    }()
+    
     private let weatherIcon = UIImageView()
     private let activityIdicator = UIActivityIndicatorView(style: .large)
     private let searchController = UISearchController(searchResultsController: nil)
@@ -85,6 +99,7 @@ final class WeatheryViewController: UIViewController {
         view.addSubview(activityIdicator)
         view.addSubview(daysCollectionView)
         view.addSubview(titleCollectionViewLabel)
+        view.addSubview(buttonLocation)
         
         cityLabel.translatesAutoresizingMaskIntoConstraints = false
         temperatureLabel.translatesAutoresizingMaskIntoConstraints = false
@@ -93,6 +108,7 @@ final class WeatheryViewController: UIViewController {
         activityIdicator.translatesAutoresizingMaskIntoConstraints = false
         daysCollectionView.translatesAutoresizingMaskIntoConstraints = false
         titleCollectionViewLabel.translatesAutoresizingMaskIntoConstraints = false
+        buttonLocation.translatesAutoresizingMaskIntoConstraints = false
         
         activityIdicator.color = .white
         
@@ -131,7 +147,12 @@ final class WeatheryViewController: UIViewController {
             daysCollectionView.heightAnchor.constraint(equalToConstant: 200),
             
             titleCollectionViewLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            titleCollectionViewLabel.bottomAnchor.constraint(equalTo: daysCollectionView.topAnchor, constant: -5)
+            titleCollectionViewLabel.bottomAnchor.constraint(equalTo: daysCollectionView.topAnchor, constant: -5),
+            
+            buttonLocation.heightAnchor.constraint(equalToConstant: 44),
+            buttonLocation.widthAnchor.constraint(equalToConstant: 44),
+            buttonLocation.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -20),
+            buttonLocation.bottomAnchor.constraint(equalTo: daysCollectionView.topAnchor, constant: -20)
         ])
     }
     
@@ -298,6 +319,10 @@ final class WeatheryViewController: UIViewController {
         }
         return dailyForecast
     }
+    
+    @objc func buttonLocationTapped() {
+        
+    }
 }
 
 extension WeatheryViewController: UISearchBarDelegate {
@@ -356,3 +381,4 @@ extension WeatheryViewController: UICollectionViewDelegate, UICollectionViewData
     }
     
 }
+
