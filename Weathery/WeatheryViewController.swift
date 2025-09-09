@@ -68,6 +68,7 @@ final class WeatheryViewController: UIViewController {
     private let networkService: NetworkServiceProtocol
     private let weatheeryUserDefaults = WeatheryUserDefaults.shared
     private let locationManager = CLLocationManager()
+    private var flag: Bool = true
     
     init(weatherService: NetworkServiceProtocol) {
         self.networkService = weatherService
@@ -191,8 +192,10 @@ final class WeatheryViewController: UIViewController {
                 self?.forecastData = self?.filterDailyForecast(forecast.list) ?? []
                 DispatchQueue.main.async {
                     self?.daysCollectionView.reloadData()
+                    self?.flag = true
                 }
             case .failure(let error):
+                self?.flag = false
                 print("Ошибка прогноза: \(error)")
             }
         }
@@ -479,17 +482,25 @@ extension WeatheryViewController: UICollectionViewDelegate, UICollectionViewData
         
         let forecastItem = forecastData[indexPath.item]
         
-        cell.dayLabel.text = getDayOfWeek(from: forecastItem.dt)
-        cell.temperatureLabel.text = "\(Int(forecastItem.main.temp))°"
-        let weatherIcon = getWeatherIcon(from: forecastItem.weather.first?.icon ?? "")
-        cell.iconImageView.image = weatherIcon.image
-        cell.iconImageView.tintColor = weatherIcon.color
-        
-        cell.backgroundColor = .white
-        cell.layer.masksToBounds = true
-        cell.layer.cornerRadius = 25
-        
-        return cell
+        if flag{
+            cell.dayLabel.text = getDayOfWeek(from: forecastItem.dt)
+            cell.temperatureLabel.text = "\(Int(forecastItem.main.temp))°"
+            let weatherIcon = getWeatherIcon(from: forecastItem.weather.first?.icon ?? "")
+            cell.iconImageView.image = weatherIcon.image
+            cell.iconImageView.tintColor = weatherIcon.color
+            
+            cell.backgroundColor = .white
+            cell.layer.masksToBounds = true
+            cell.layer.cornerRadius = 25
+            
+            return cell
+        } else {
+            cell.dayLabel.text = "--"
+            cell.temperatureLabel.text = "--°"
+            cell.iconImageView.image = UIImage(systemName: "questionmark")
+            cell.iconImageView.tintColor = .systemRed
+            return cell
+        }
     }
 }
 
