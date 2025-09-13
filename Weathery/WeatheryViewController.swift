@@ -193,7 +193,7 @@ final class WeatheryViewController: UIViewController {
         networkService.getForecastForCity(city) { [weak self] result in
             switch result {
             case .success(let forecast):
-                self?.forecastData = self?.filterDailyForecast(forecast.list) ?? []
+                self?.forecastData = ForecastFilterService.filterDailyForecast(forecast.list)
                 DispatchQueue.main.async {
                     self?.daysCollectionView.reloadData()
                     self?.flag = true
@@ -237,30 +237,6 @@ final class WeatheryViewController: UIViewController {
     }
     
     // MARK: - UI Methods
-    private func animateElements() {
-        self.cityLabel.transform = CGAffineTransform(translationX: 0, y: 20)
-        self.temperatureLabel.transform = CGAffineTransform(translationX: 0, y: 20)
-        self.weatherIcon.transform = CGAffineTransform(scaleX: 0.8, y: 0.8)
-        
-        UIView.animate(withDuration: 0.6) {
-            self.cityLabel.alpha = 1
-            self.cityLabel.transform = .identity
-        }
-        
-        UIView.animate(withDuration: 0.6, delay: 0.1, options: .curveEaseOut) {
-            self.temperatureLabel.alpha = 1
-            self.temperatureLabel.transform = .identity
-        }
-        
-        UIView.animate(withDuration: 0.8, delay: 0.2, usingSpringWithDamping: 0.6, initialSpringVelocity: 0.5) {
-            self.weatherIcon.alpha = 1
-            self.weatherIcon.transform = .identity
-            self.weatherDescriptionLabel.alpha = 1
-            self.titleCollectionViewLabel.alpha = 1
-            self.daysCollectionView.alpha = 1
-        }
-    }
-    
     private func config(weather: WeatherResponse) {
         cityLabel.text = weather.name
         temperatureLabel.text = WeatherFormatter.temperature(weather.main.temp)
@@ -269,11 +245,18 @@ final class WeatheryViewController: UIViewController {
         weatherUserDefaults.city = weather.name
         
         if let iconCode = weather.weather.first?.icon {
-            let iconData = getWeatherIcon(from: iconCode)
+            let iconData = WeatherIconService.getWeatherIcon(from: iconCode)
             weatherIcon.image = iconData.image
             weatherIcon.tintColor = iconData.color
         }
-        animateElements()
+        AnimationService.animateWeatherElements(
+            cityLabel: cityLabel,
+            temperatureLabel: temperatureLabel,
+            weatherIcon: weatherIcon,
+            weatherDescriptionLabel: weatherDescriptionLabel,
+            titleCollectionViewLabel: titleCollectionViewLabel,
+            daysCollectionView: daysCollectionView
+        )
     }
     
     private func showAlertError() {
@@ -309,66 +292,6 @@ final class WeatheryViewController: UIViewController {
         }
     }
     
-    private func getWeatherIcon(from iconCode: String) -> (image: UIImage?, color: UIColor) {
-        switch iconCode {
-        case "01d": return (UIImage(systemName: "sun.max"), .systemOrange)
-        case "01n": return (UIImage(systemName: "moon"), .systemGray)
-        case "02d", "03d", "04d": return (UIImage(systemName: "cloud.sun"), .systemYellow)
-        case "02n", "03n", "04n": return (UIImage(systemName: "cloud.moon"), .systemGray)
-        case "09d", "10d": return (UIImage(systemName: "cloud.rain"), .systemBlue)
-        case "09n", "10n": return (UIImage(systemName: "cloud.rain"), .systemBlue)
-        case "11d", "11n": return (UIImage(systemName: "cloud.bolt"), .systemGray3)
-        case "13d", "13n": return (UIImage(systemName: "snow"), .systemTeal)
-        case "50d", "50n": return (UIImage(systemName: "cloud.fog"), .systemGray)
-        default: return (UIImage(systemName: "questionmark"), .systemPink)
-        }
-    }
-    
-    private func filterDailyForecast(_ list: [ForecastResponse.ForecastItem]) -> [ForecastResponse.ForecastItem] {
-        var dailyForecast: [ForecastResponse.ForecastItem] = []
-        var addedDays: Set<String> = []
-        
-        let dateFormatter = DateFormatter()
-        dateFormatter.dateFormat = "yyyy-MM-dd"
-        
-        for item in list {
-            let date = Date(timeIntervalSince1970: item.dt)
-            let dayKey = dateFormatter.string(from: date)
-            
-            let calendar = Calendar.current
-            let hour = calendar.component(.hour, from: date)
-            
-            if !addedDays.contains(dayKey) && hour >= 11 && hour <= 13 {
-                dailyForecast.append(item)
-                addedDays.insert(dayKey)
-            }
-            
-            if dailyForecast.count >= 5 {
-                break
-            }
-        }
-        
-        if dailyForecast.count < 5 {
-            dailyForecast = []
-            addedDays = []
-            
-            for item in list {
-                let date = Date(timeIntervalSince1970: item.dt)
-                let dayKey = dateFormatter.string(from: date)
-                
-                if !addedDays.contains(dayKey) {
-                    dailyForecast.append(item)
-                    addedDays.insert(dayKey)
-                }
-                
-                if dailyForecast.count >= 5 {
-                    break
-                }
-            }
-        }
-        return dailyForecast
-    }
-    
     // MARK: - Actions
     @objc private func buttonLocationTapped() {
         locationService.requestLocation()
@@ -380,20 +303,7 @@ final class WeatheryViewController: UIViewController {
     }
     
     private func showLocationDeniedAlert() {
-        let alert = UIAlertController(
-            title: "Доступ к геолокации запрещен",
-            message: "Разрешите доступ к геолокации в Настройках > Конфиденциальность > Службы геолокации",
-            preferredStyle: .alert
-        )
-        
-        alert.addAction(UIAlertAction(title: "Отмена", style: .cancel))
-        alert.addAction(UIAlertAction(title: "Настройки", style: .default) { _ in
-            if let settingsURL = URL(string: UIApplication.openSettingsURLString) {
-                UIApplication.shared.open(settingsURL)
-            }
-        })
-        
-        present(alert, animated: true)
+        AlertService.showLocationDeniedAlert(on: self)
     }
     
     private func handleLocation(_ location: CLLocation) {
@@ -413,13 +323,7 @@ final class WeatheryViewController: UIViewController {
     }
     
     private func showGeocodingErrorAlert() {
-        let alert = UIAlertController(
-            title: "Ошибка",
-            message: "Не удалось определить ваш город",
-            preferredStyle: .alert
-        )
-        alert.addAction(UIAlertAction(title: "OK", style: .default))
-        present(alert, animated: true)
+        AlertService.showErrorAlert(on: self, title: "Ошибка", message: "Попробуйте позже")
     }
 }
 
@@ -483,7 +387,7 @@ extension WeatheryViewController: UICollectionViewDelegate, UICollectionViewData
         
         cell.dayLabel.text = WeatherFormatter.dayOfWeek(from: forecastItem.dt)
         cell.temperatureLabel.text = WeatherFormatter.temperature(forecastItem.main.temp)
-        let weatherIcon = getWeatherIcon(from: forecastItem.weather.first?.icon ?? "")
+        let weatherIcon = WeatherIconService.getWeatherIcon(from: forecastItem.weather.first?.icon ?? "")
         cell.iconImageView.image = weatherIcon.image
         cell.iconImageView.tintColor = weatherIcon.color
         
