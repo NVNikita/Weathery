@@ -1,5 +1,5 @@
 //
-//  ViewController.swift
+//  WeatheryViewController.swift
 //  Weathery
 //
 //  Created by Никита Нагорный on 19.08.2025.
@@ -15,6 +15,7 @@ protocol NetworkServiceProtocol {
 
 final class WeatheryViewController: UIViewController {
     
+    // MARK: - UI Elements
     private let cityLabel: UILabel = {
         let cityLabel = UILabel()
         cityLabel.font = .systemFont(ofSize: 38, weight: .light)
@@ -61,42 +62,49 @@ final class WeatheryViewController: UIViewController {
     }()
     
     private let weatherIcon = UIImageView()
-    private let activityIdicator = UIActivityIndicatorView(style: .large)
+    private let activityIndicator = UIActivityIndicatorView(style: .large)
     private let searchController = UISearchController(searchResultsController: nil)
-    private var forecastData: [ForecastResponse.ForecastItem] = []
     
+    // MARK: - Properties
     private let networkService: NetworkServiceProtocol
-    private let weatheeryUserDefaults = WeatheryUserDefaults.shared
-    private let locationManager = CLLocationManager()
+    private let locationService: LocationServiceProtocol
+    private let weatherUserDefaults = WeatheryUserDefaults.shared
+    
+    private var isFetchingData = false
+    private var forecastData: [ForecastResponse.ForecastItem] = []
     private var flag: Bool = true
     
-    init(weatherService: NetworkServiceProtocol) {
+    // MARK: - Initialization
+    init(weatherService: NetworkServiceProtocol, locationService: LocationServiceProtocol = LocationService()) {
         self.networkService = weatherService
+        self.locationService = locationService
         super.init(nibName: nil, bundle: nil)
+        self.locationService.delegate = self
     }
     
     required init?(coder: NSCoder) {
         fatalError("init(coder:) has not been implemented")
     }
     
+    // MARK: - Lifecycle
     override func viewDidLoad() {
         super.viewDidLoad()
         
         view.backgroundColor = .systemCyan
         
         setupUI()
-        setupConsraints()
+        setupConstraints()
         setupSearchBar()
-        setupLocationManager()
         loadCity()
     }
     
+    // MARK: - Setup Methods
     private func setupUI() {
         view.addSubview(cityLabel)
         view.addSubview(temperatureLabel)
         view.addSubview(weatherDescriptionLabel)
         view.addSubview(weatherIcon)
-        view.addSubview(activityIdicator)
+        view.addSubview(activityIndicator)
         view.addSubview(daysCollectionView)
         view.addSubview(titleCollectionViewLabel)
         view.addSubview(buttonLocation)
@@ -105,12 +113,12 @@ final class WeatheryViewController: UIViewController {
         temperatureLabel.translatesAutoresizingMaskIntoConstraints = false
         weatherDescriptionLabel.translatesAutoresizingMaskIntoConstraints = false
         weatherIcon.translatesAutoresizingMaskIntoConstraints = false
-        activityIdicator.translatesAutoresizingMaskIntoConstraints = false
+        activityIndicator.translatesAutoresizingMaskIntoConstraints = false
         daysCollectionView.translatesAutoresizingMaskIntoConstraints = false
         titleCollectionViewLabel.translatesAutoresizingMaskIntoConstraints = false
         buttonLocation.translatesAutoresizingMaskIntoConstraints = false
         
-        activityIdicator.color = .white
+        activityIndicator.color = .white
         
         daysCollectionView.register(DaysCollectionViewCell.self, forCellWithReuseIdentifier: "cell")
         
@@ -130,12 +138,7 @@ final class WeatheryViewController: UIViewController {
         titleCollectionViewLabel.alpha = 0
     }
     
-    private func setupLocationManager() {
-        locationManager.delegate = self
-        locationManager.desiredAccuracy = kCLLocationAccuracyKilometer
-    }
-    
-    private func setupConsraints() {
+    private func setupConstraints() {
         NSLayoutConstraint.activate([
             cityLabel.centerXAnchor.constraint(equalTo: view.centerXAnchor),
             cityLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 20),
@@ -151,8 +154,8 @@ final class WeatheryViewController: UIViewController {
             weatherIcon.widthAnchor.constraint(equalToConstant: 130),
             weatherIcon.heightAnchor.constraint(equalToConstant: 130),
             
-            activityIdicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
-            activityIdicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+            activityIndicator.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            activityIndicator.centerYAnchor.constraint(equalTo: view.centerYAnchor),
             
             daysCollectionView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor),
             daysCollectionView.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 20),
@@ -185,6 +188,7 @@ final class WeatheryViewController: UIViewController {
         navigationItem.hidesSearchBarWhenScrolling = false
     }
     
+    // MARK: - Data Methods
     private func loadForecast(for city: String) {
         networkService.getForecastForCity(city) { [weak self] result in
             switch result {
@@ -202,18 +206,22 @@ final class WeatheryViewController: UIViewController {
     }
     
     private func getWeather(_ city: String) {
-        activityIdicator.startAnimating()
+        guard !isFetchingData else { return }
+        isFetchingData = true
+        activityIndicator.startAnimating()
+        
         networkService.getWeatherForCity(city) { [weak self] result in
             guard let self = self else { return }
             DispatchQueue.main.async {
+                self.isFetchingData = false
                 switch result {
                 case .success(let weather):
                     self.config(weather: weather)
-                    self.activityIdicator.stopAnimating()
+                    self.activityIndicator.stopAnimating()
                     self.loadForecast(for: city)
                 case .failure(let error):
                     print("Error: \(error)")
-                    self.showAllertError()
+                    self.showAlertError()
                     self.placeholderLoaderError()
                 }
             }
@@ -221,13 +229,14 @@ final class WeatheryViewController: UIViewController {
     }
     
     private func loadCity() {
-        if let city = weatheeryUserDefaults.city {
+        if let city = weatherUserDefaults.city {
             getWeather(city)
         } else {
             getWeather("Москва")
         }
     }
     
+    // MARK: - UI Methods
     private func animateElements() {
         self.cityLabel.transform = CGAffineTransform(translationX: 0, y: 20)
         self.temperatureLabel.transform = CGAffineTransform(translationX: 0, y: 20)
@@ -254,10 +263,10 @@ final class WeatheryViewController: UIViewController {
     
     private func config(weather: WeatherResponse) {
         cityLabel.text = weather.name
-        temperatureLabel.text = "\(Int(weather.main.temp))°"
+        temperatureLabel.text = WeatherFormatter.temperature(weather.main.temp)
         weatherDescriptionLabel.text = weather.weather.first?.description ?? ""
         
-        weatheeryUserDefaults.city = weather.name
+        weatherUserDefaults.city = weather.name
         
         if let iconCode = weather.weather.first?.icon {
             let iconData = getWeatherIcon(from: iconCode)
@@ -267,10 +276,12 @@ final class WeatheryViewController: UIViewController {
         animateElements()
     }
     
-    private func showAllertError() {
-        let alert = UIAlertController(title: "Ошибка",
-                                      message: "Попробуйте позже",
-                                      preferredStyle: .alert)
+    private func showAlertError() {
+        let alert = UIAlertController(
+            title: "Ошибка",
+            message: "Попробуйте позже",
+            preferredStyle: .alert
+        )
         
         let action = UIAlertAction(title: "OK", style: .default)
         alert.addAction(action)
@@ -284,22 +295,18 @@ final class WeatheryViewController: UIViewController {
         self.weatherDescriptionLabel.text = "--"
         self.weatherIcon.image = UIImage(systemName: "questionmark")
         self.weatherIcon.tintColor = .systemPink
-        self.activityIdicator.stopAnimating()
+        self.activityIndicator.stopAnimating()
+        
+        self.forecastData = []
+        self.flag = false
+        self.daysCollectionView.reloadData()
         
         UIView.animate(withDuration: 0.4) {
-                self.cityLabel.alpha = 1
-                self.temperatureLabel.alpha = 1
-                self.weatherDescriptionLabel.alpha = 1
-                self.weatherIcon.alpha = 1
-            }
-    }
-    
-    private func getDayOfWeek(from timestamp: TimeInterval) -> String {
-        let date = Date(timeIntervalSince1970: timestamp)
-        let formatter = DateFormatter()
-        formatter.dateFormat = "EE"
-        formatter.locale = Locale(identifier: "ru_RU")
-        return formatter.string(from: date)
+            self.cityLabel.alpha = 1
+            self.temperatureLabel.alpha = 1
+            self.weatherDescriptionLabel.alpha = 1
+            self.weatherIcon.alpha = 1
+        }
     }
     
     private func getWeatherIcon(from iconCode: String) -> (image: UIImage?, color: UIColor) {
@@ -362,24 +369,14 @@ final class WeatheryViewController: UIViewController {
         return dailyForecast
     }
     
+    // MARK: - Actions
     @objc private func buttonLocationTapped() {
-        let status = locationManager.authorizationStatus
-        
-        switch status {
-        case .notDetermined:
-            locationManager.requestWhenInUseAuthorization()
-        case .authorizedWhenInUse, .authorizedAlways:
-            startLocationUpdate()
-        case .denied, .restricted:
-            showLocationDeniedAlert()
-        @unknown default:
-            break
-        }
+        locationService.requestLocation()
     }
     
     private func startLocationUpdate() {
-        activityIdicator.startAnimating()
-        locationManager.startUpdatingLocation()
+        activityIndicator.startAnimating()
+        locationService.requestLocation()
     }
     
     private func showLocationDeniedAlert() {
@@ -399,31 +396,17 @@ final class WeatheryViewController: UIViewController {
         present(alert, animated: true)
     }
     
-    private func reverseGeocode(location: CLLocation) {
-        let geocoder = CLGeocoder()
-        
-        geocoder.reverseGeocodeLocation(location) { [weak self] (placemarks, error) in
-            guard let self = self else { return }
-            
+    private func handleLocation(_ location: CLLocation) {
+        locationService.reverseGeocode(location: location) { [weak self] result in
             DispatchQueue.main.async {
-                self.activityIdicator.stopAnimating()
+                self?.activityIndicator.stopAnimating()
                 
-                if let error = error {
+                switch result {
+                case .success(let city):
+                    self?.getWeather(city)
+                case .failure(let error):
                     print("Ошибка геокодирования: \(error.localizedDescription)")
-                    self.showGeocodingErrorAlert()
-                    return
-                }
-                
-                if let placemark = placemarks?.first {
-                    let city = placemark.locality ?? placemark.administrativeArea ?? placemark.name ?? "Неизвестный город"
-                    
-                    if city != "Неизвестный город" {
-                        self.getWeather(city)
-                    } else {
-                        self.showGeocodingErrorAlert()
-                    }
-                } else {
-                    self.showGeocodingErrorAlert()
+                    self?.showGeocodingErrorAlert()
                 }
             }
         }
@@ -440,9 +423,12 @@ final class WeatheryViewController: UIViewController {
     }
 }
 
+// MARK: - UISearchBarDelegate
 extension WeatheryViewController: UISearchBarDelegate {
     func searchBarSearchButtonClicked(_ searchBar: UISearchBar) {
-        guard let city = searchBar.text, !city.isEmpty else { return }
+        guard let city = searchBar.text?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !city.isEmpty else { return }
+        
         getWeather(city)
         searchBar.text = ""
         searchController.dismiss(animated: true)
@@ -450,9 +436,10 @@ extension WeatheryViewController: UISearchBarDelegate {
     }
 }
 
+// MARK: - UICollectionViewDataSource & Delegate
 extension WeatheryViewController: UICollectionViewDelegate, UICollectionViewDataSource, UICollectionViewDelegateFlowLayout {
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        return forecastData.count
+        return 5
     }
     
     func collectionView(_ collectionView: UICollectionView, layout collectionViewLayout: UICollectionViewLayout, minimumLineSpacingForSectionAt section: Int) -> CGFloat {
@@ -473,69 +460,68 @@ extension WeatheryViewController: UICollectionViewDelegate, UICollectionViewData
             return UICollectionViewCell()
         }
         
+        if forecastData.isEmpty || !flag {
+            cell.dayLabel.text = ""
+            cell.temperatureLabel.text = "?"
+            cell.temperatureLabel.textColor = .systemRed
+            cell.iconImageView.image = nil
+            cell.backgroundColor = .white
+            cell.layer.masksToBounds = true
+            cell.layer.cornerRadius = 25
+            return cell
+        }
+        
         guard indexPath.item < forecastData.count else {
-            cell.dayLabel.text = "--"
-            cell.temperatureLabel.text = "--°"
+            cell.dayLabel.text = "?"
+            cell.temperatureLabel.text = "?°"
             cell.iconImageView.image = UIImage(systemName: "questionmark")
+            cell.iconImageView.tintColor = .systemRed
             return cell
         }
         
         let forecastItem = forecastData[indexPath.item]
         
-        if flag{
-            cell.dayLabel.text = getDayOfWeek(from: forecastItem.dt)
-            cell.temperatureLabel.text = "\(Int(forecastItem.main.temp))°"
-            let weatherIcon = getWeatherIcon(from: forecastItem.weather.first?.icon ?? "")
-            cell.iconImageView.image = weatherIcon.image
-            cell.iconImageView.tintColor = weatherIcon.color
-            
-            cell.backgroundColor = .white
-            cell.layer.masksToBounds = true
-            cell.layer.cornerRadius = 25
-            
-            return cell
-        } else {
-            cell.dayLabel.text = "--"
-            cell.temperatureLabel.text = "--°"
-            cell.iconImageView.image = UIImage(systemName: "questionmark")
-            cell.iconImageView.tintColor = .systemRed
-            return cell
-        }
+        cell.dayLabel.text = WeatherFormatter.dayOfWeek(from: forecastItem.dt)
+        cell.temperatureLabel.text = WeatherFormatter.temperature(forecastItem.main.temp)
+        let weatherIcon = getWeatherIcon(from: forecastItem.weather.first?.icon ?? "")
+        cell.iconImageView.image = weatherIcon.image
+        cell.iconImageView.tintColor = weatherIcon.color
+        
+        cell.backgroundColor = .white
+        cell.layer.masksToBounds = true
+        cell.layer.cornerRadius = 25
+        
+        return cell
     }
 }
 
-extension WeatheryViewController: CLLocationManagerDelegate {
-    func locationManager(_ manager: CLLocationManager, didUpdateLocations locations: [CLLocation]) {
-        manager.stopUpdatingLocation()
-        
-        guard let location = locations.last else {
-            activityIdicator.stopAnimating()
-            return
+// MARK: - LocationServiceDelegate
+extension WeatheryViewController: LocationServiceDelegate {
+    func locationService(_ service: LocationServiceProtocol, didUpdateLocation location: CLLocation) {
+        handleLocation(location)
+    }
+    
+    func locationService(_ service: LocationServiceProtocol, didFailWithError error: Error) {
+        DispatchQueue.main.async {
+            self.activityIndicator.stopAnimating()
+            print("Ошибка получения локации: \(error.localizedDescription)")
+            
+            let alert = UIAlertController(
+                title: "Ошибка",
+                message: "Не удалось получить ваше местоположение",
+                preferredStyle: .alert
+            )
+            alert.addAction(UIAlertAction(title: "OK", style: .default))
+            self.present(alert, animated: true)
         }
-        
-        reverseGeocode(location: location)
     }
     
-    func locationManager(_ manager: CLLocationManager, didFailWithError error: Error) {
-        manager.stopUpdatingLocation()
-        activityIdicator.stopAnimating()
-        print("Ошибка получения локации: \(error.localizedDescription)")
-        
-        let alert = UIAlertController(
-            title: "Ошибка",
-            message: "Не удалось получить ваше местоположение",
-            preferredStyle: .alert
-        )
-        alert.addAction(UIAlertAction(title: "OK", style: .default))
-        present(alert, animated: true)
-    }
-    
-    func locationManagerDidChangeAuthorization(_ manager: CLLocationManager) {
-        switch manager.authorizationStatus {
+    func locationService(_ service: LocationServiceProtocol, didChangeAuthorization status: CLAuthorizationStatus) {
+        switch status {
         case .authorizedWhenInUse, .authorizedAlways:
             startLocationUpdate()
         case .denied, .restricted:
-            activityIdicator.stopAnimating()
+            activityIndicator.stopAnimating()
             showLocationDeniedAlert()
         case .notDetermined:
             break
